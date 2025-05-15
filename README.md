@@ -27,7 +27,7 @@ Segment customers based on:
 
 - **SQL**: Data extraction, transformation, and aggregation (via Beekeeper Studio, NeonDB)
 - **Python**: Clustering (Pandas, Scikit-learn, Seaborn, etc.) 
-- **Jupyter Notebook**: EDA and model training  ([notebooks/clustering_analysis.ipynb`](notebooks/clustering_analysis.ipynb))
+- **Jupyter Notebook**: EDA and model training  ([notebooks/tide_travel_clustering.ipynb`](notebooks/tide_travel_clustering.ipynb))
 - **K-Means Clustering**: Primary algorithm
 - **Silhouette Score**: `0.29` (adequate for business interpretation)
 
