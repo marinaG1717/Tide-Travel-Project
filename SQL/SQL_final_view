@@ -1,0 +1,140 @@
+SQL link(dataset): Test@ep-noisy-flower-846766.us-east-2.aws.neon.tech:5432/TravelTide
+
+-- Step 1: Aggregate session data per user
+CREATE TEMP VIEW user_session_agg AS
+SELECT
+    user_id,
+    COUNT(*) AS total_sessions,  -- how many sessions the user had
+    ROUND(AVG(page_clicks), 2) AS avg_clicks,  -- average pages clicked
+    SUM(flight_booked::int) AS flights_booked,  -- total flights booked
+    SUM(hotel_booked::int) AS hotels_booked,  -- total hotels booked
+    SUM(cancellation::int) AS total_cancellations,  -- how many times user canceled
+    ROUND(SUM(EXTRACT(EPOCH FROM session_end - session_start)), 2) AS total_session_time, -- total time spent
+    CASE  -- booking type
+        WHEN BOOL_OR(flight_booked) AND BOOL_OR(hotel_booked) THEN 'flight_and_hotel'
+        WHEN BOOL_OR(flight_booked) THEN 'just_flight'
+        WHEN BOOL_OR(hotel_booked) THEN 'just_hotel'
+        ELSE 'no_booking'
+    END AS booking_type,
+    AVG(EXTRACT(EPOCH FROM session_end - session_start)) AS avg_session_duration,  -- average session time
+    CASE  -- classify session
+        WHEN COUNT(*) = 1 AND BOOL_OR(flight_booked) THEN 'booking'
+        ELSE 'browsing'
+    END AS session_category,
+    ARRAY_AGG(DISTINCT trip_id) AS trip_ids  -- all trips connected to user
+FROM sessions
+WHERE session_start >= '2023-01-07'
+  AND page_clicks >= 2
+GROUP BY user_id;
+-- Step 2: Count bags from flights
+CREATE TEMP VIEW user_bags AS
+SELECT
+    s.user_id,
+    SUM(f.checked_bags) AS total_checked_bags  -- how many bags user checked
+FROM sessions s
+JOIN flights f ON s.trip_id = f.trip_id
+WHERE s.session_start >= '2023-01-07'
+GROUP BY s.user_id;
+-- Step 3: Calculate nights in hotels and discounts
+CREATE TEMP VIEW user_nights AS
+SELECT
+    s.user_id,
+    SUM(s.flight_discount_amount) AS flight_discount_amount,
+    SUM(s.hotel_discount_amount) AS hotel_discount_amount,
+    SUM(h.hotel_per_room_usd * h.rooms * 
+        CASE 
+            WHEN h.nights >= 0 THEN h.nights
+            WHEN h.check_out_time > h.check_in_time THEN 
+                EXTRACT(DAY FROM h.check_out_time - h.check_in_time)
+            ELSE 0
+        END
+    ) AS total_hotel_cost,  -- total cost for hotel
+    SUM(
+        CASE 
+            WHEN h.nights >= 0 THEN h.nights
+            WHEN h.check_out_time > h.check_in_time THEN 
+                EXTRACT(DAY FROM h.check_out_time - h.check_in_time)
+            ELSE 0
+        END
+    ) AS total_nights  -- total nights stayed
+FROM sessions s
+JOIN hotels h ON s.trip_id = h.trip_id
+WHERE s.session_start >= '2023-01-07'
+GROUP BY s.user_id;
+-- Step 4: Final user-level table
+SELECT
+    u.user_id,
+    DATE_PART('year', CURRENT_DATE) - DATE_PART('year', u.birthdate) AS age,
+    u.gender,
+    u.married::int,
+    u.has_children::int,
+    u.home_country,
+    u.home_city,
+    u.home_airport,
+    u.sign_up_date,
+    
+    -- session metrics
+    COALESCE(us.total_sessions, 0) AS total_sessions,
+    COALESCE(us.avg_clicks, 0) AS avg_clicks,
+    COALESCE(us.flights_booked, 0) AS flights_booked,
+    COALESCE(us.hotels_booked, 0) AS hotels_booked,
+    COALESCE(us.total_cancellations, 0) AS total_cancellations,
+    COALESCE(us.total_session_time, 0) AS total_session_time,
+    ROUND(COALESCE(us.avg_session_duration, 0), 2) AS avg_session_duration,
+    COALESCE(us.session_category, 'browsing') AS session_category,
+    us.booking_type,
+    
+    -- bags
+    COALESCE(b.total_checked_bags, 0) AS checked_bags,
+    
+    -- nights and discounts
+    COALESCE(n.total_nights, 0) AS nights,
+    ROUND(COALESCE(n.flight_discount_amount, 0), 2) AS flight_discount_amount,
+    ROUND(COALESCE(n.hotel_discount_amount, 0), 2) AS hotel_discount_amount,
+    
+    -- money spent on flights
+    ROUND(COALESCE(flight.base_fare_usd, 0) * COALESCE(us.flights_booked, 0) * 
+        (1 - COALESCE(n.flight_discount_amount, 0) / 100), 2) AS total_flight_spent,
+        
+    -- money spent on hotels
+    ROUND(COALESCE(hotel.hotel_per_room_usd, 0) * COALESCE(us.hotels_booked, 0) * 
+        COALESCE(n.total_nights, 0) * 
+        (1 - COALESCE(n.hotel_discount_amount, 0) / 100), 2) AS total_hotel_spent,
+    
+    -- total spend
+    ROUND((
+        COALESCE(flight.base_fare_usd, 0) * COALESCE(us.flights_booked, 0) * 
+        (1 - COALESCE(n.flight_discount_amount, 0) / 100)
+        +
+        COALESCE(hotel.hotel_per_room_usd, 0) * COALESCE(us.hotels_booked, 0) * 
+        COALESCE(n.total_nights, 0) * 
+        (1 - COALESCE(n.hotel_discount_amount, 0) / 100)
+    ),2) AS total_spent,
+    
+    -- how sensitive user is to discounts
+    ROUND((CASE 
+        WHEN (
+            COALESCE(flight.base_fare_usd, 0) * COALESCE(us.flights_booked, 0) +
+            COALESCE(hotel.hotel_per_room_usd, 0) * COALESCE(us.hotels_booked, 0) * COALESCE(n.total_nights, 0)
+        ) > 0 THEN 
+            (COALESCE(n.flight_discount_amount, 0) + COALESCE(n.hotel_discount_amount, 0)) / 2
+        ELSE 0
+    END), 2) AS discount_sensitivity
+FROM users u
+LEFT JOIN user_session_agg us ON u.user_id = us.user_id
+LEFT JOIN user_bags b ON u.user_id = b.user_id
+LEFT JOIN user_nights n ON u.user_id = n.user_id
+LEFT JOIN flights flight ON flight.trip_id = ANY(us.trip_ids)
+LEFT JOIN hotels hotel ON hotel.trip_id = ANY(us.trip_ids)
+WHERE COALESCE(us.total_sessions, 0) > 7;
+
+/*My main steps
+💡 Short Project Consultation
+🎯 Project Goal:
+We want to group users into segments based on their behavior, bookings, and discount usage. This helps marketing, product, and support teams make better decisions:
+Who are frequent travelers?
+Who reacts to discounts?
+Who spends the most?
+Who just browses?
+✅ Main SQL Steps (with explanation)
+Aggregate sessions per user → user_session_agg
