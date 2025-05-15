@@ -26,8 +26,8 @@ Segment customers based on:
 ## 🧱 Tech Stack
 
 - **SQL**: Data extraction, transformation, and aggregation (via Beekeeper Studio, NeonDB)
-- **Python**: Clustering (Pandas, Scikit-learn, Seaborn, etc.)
-- **Jupyter Notebook**: EDA and model training
+- **Python**: Clustering (Pandas, Scikit-learn, Seaborn, etc.) 
+- **Jupyter Notebook**: EDA and model training  ([notebooks/clustering_analysis.ipynb`](notebooks/clustering_analysis.ipynb))
 - **K-Means Clustering**: Primary algorithm
 - **Silhouette Score**: `0.29` (adequate for business interpretation)
 
@@ -38,9 +38,8 @@ Segment customers based on:
 - **Primary SQL Dataset**: TravelTide database  
   `test@ep-noisy-flower-846766.us-east-2.aws.neon.tech:5432/TravelTide`
 - **CSV Exports**:
-  - [Raw CSV from SQL](#)  
-  - [Clustered CSV Output](#)
-
+  - [Raw CSV from SQL](data/tide_trevel_query_results_all.csv)  
+  - [Clustered CSV Output](data/clustering_results_tide_trevel.csv)
 ---
 
 ## 🔍 Methodology
