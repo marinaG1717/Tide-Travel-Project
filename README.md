@@ -3,6 +3,7 @@
 
 This project segments travel customers into distinct behavioral clusters using SQL for data preparation and Python for machine learning. Our goal is to support data-driven marketing strategies with actionable insights and targeted offers.
 
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/marinaG1717/Tide-Travel-Project/blob/main/notebooks/customer_segmentation.ipynb)
 ---
 
 ## 🎯 Project Goal
