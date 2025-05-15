@@ -45,7 +45,7 @@ Segment customers based on:
 ## 🔍 Methodology
 
 ### 🧮 SQL Aggregations
-
+ -[SQL Final view](SQL/SQL_main_for_csv_tide_trevel.docx)
 - `user_session_agg`: Sessions, bookings, activity labels  
 - `user_bags`: Travel intensity via checked bags  
 - `user_nights`: Spending, discounts, nights stayed  
